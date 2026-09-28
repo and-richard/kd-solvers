@@ -56,7 +56,7 @@ struct PulseParameters
     function PulseParameters(A0::Real, λ_nm::Real, σ::Real, shelf_duration_fs::Real)
         A0 > 0                 || throw(ArgumentError("Field amplitude A0 must be strictly positive (got $A0)"))
         λ_nm > 0               || throw(ArgumentError("Laser wavelength λ_nm must be strictly positive (got $λ_nm)"))
-        σ > 0                  || throw(ArgumentError("Pulse rise parameter σ must be strictly positive (got $σ)"))
+        σ > 0                  || throw(ArgumentError("Gaussian falloff parameter σ must be strictly positive (got $σ)"))
         shelf_duration_fs >= 0 || throw(ArgumentError("Shelf duration must be non-negative (got $shelf_duration_fs)"))
         return new(Float64(A0), Float64(λ_nm), Float64(σ), Float64(shelf_duration_fs))
     end
@@ -67,9 +67,11 @@ PulseParameters(nt::NamedTuple) = PulseParameters(; nt...)
 # Spatial and temporal simulation domain boundaries
 struct Domain
     T_sim::NTuple{2, Float64}     # Total integration interval: (T_min, T_max)
-    T_save::NTuple{2, Float64}    # Diagnostic recording window: (T_i, T_f)
-    dZ_steps::NTuple{2, Float64}  # Spatial resolution bounds: (dZ_min, dZ_max)
-    N_time_steps::Int             # Number of recorded time slices
+    T_save::NTuple{2, Float64}    # Data recording window: (T_i, T_f)
+    dZ_steps::NTuple{2, Float64}  # Spatial node separations: (dZ_min, dZ_max); 
+                                  #  - dZ_min is used in the active region
+                                  #  - dZ_max is used in the marginal regions
+    N_time_steps::Int             # Number of uniformly recorded time slices
 end
 
 # --- Helper Functions ---
@@ -122,7 +124,7 @@ function WENO5_Z(fm2, fm1, fc0, fp1, fp2)
     return (α0*S0 + α1*S1 + α2*S2) / (6.0 * (α0 + α1 + α2))
 end
 
-# Cumulative integration of Akima spline interpolation
+# Cumulative integration of piecewise Akima spline interpolation
 function cumint_akima!(dest::AbstractVecOrMat, in_vals, x_grid; col::Integer = 1)
     target = dest isa AbstractMatrix ? @view(dest[:, col]) : dest
     interp = AkimaInterpolation(in_vals, x_grid)
@@ -208,7 +210,7 @@ function compute_spatial_grid(grid_params)
         lo = ifelse(target < C_shelf_L, lo_falloff, Z_active_R)
         hi = ifelse(target < C_shelf_L, Z_active_L, hi_falloff)
 
-        for _ in 1:60
+        for _ in 1:60 # Fixed iterations sufficient for convergence
             mid = 0.5 * (lo + hi)
             is_less = C_cdf(mid) < target
             lo = ifelse(is_less, mid, lo)
@@ -218,7 +220,7 @@ function compute_spatial_grid(grid_params)
         return 0.5 * (lo + hi)
     end
 
-    # Coordinates of uniform ξ grid cell centers
+    # Corresponding ζ coordinates from uniform ξ grid cell center
     Z_grid = zeros(Float64, N)
     Z_grid[1] = Z_min
     Z_grid[end] = Z_max
@@ -227,7 +229,7 @@ function compute_spatial_grid(grid_params)
         Z_grid[i] = invert_cdf(ξ_i, Z_min, Z_max)
     end
 
-    # Coordinates of uniform ξ grid cell interfaces
+    # Corresponding ζ coordinates from uniform ξ grid cell interfaces
     Z_inter = zeros(Float64, N + 1)
     @inbounds @batch for j in 1:(N + 1)
         ξ_j = (j - 1.5) / (N - 1)
@@ -256,10 +258,10 @@ function compute_spatial_grid(grid_params)
     return N, Z_grid, Z_inter, inv_dZ_nodes, inv_dZ_cells
 end
 
-# --- Parameter and Cache Bundler ---
+# --- Cached Parameters Collector ---
 
-# Assembles pre-allocated caches for the extended data arrays and numerical flux values,
-# non-uniform spatial grid elements and physical constant into named tuples passed to the ODE integrator
+# Assembles pre-allocated caches for state extension, interface numerical fluxes,
+# extrema tracking, non-uniform spatial grid metrics, and constant parameters
 function nonuniform_grid_params(constants, grid_params)
     @unpack q, A0, α, β1, β2, pϵ1, pϵ2 = constants
     @unpack σ, L = grid_params
@@ -286,7 +288,7 @@ end
 
 # --- Core PDE Operator ---
 
-# Used to solve the hyperbolic conservation law for the complex u_ζ = Λ_ζ + i Θ_ζ
+# Used to solve the hyperbolic conservation law for the complex v_ζ = Λ_ζ + i Θ_ζ
 function pde_system!(du, u, params, T)
     (; caches, grid, phys) = params
     (; H_flux, ΛZ_ext, ΘZ_ext) = caches
