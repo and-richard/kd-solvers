@@ -9,19 +9,22 @@ using DataInterpolations
 using Integrals
 using JLD2
 
+
+# Use the file editor's "Find" (Ctrl + F) functionality for navigation by highlighting
+# the section title or tag (or function names within their respective sections)
 # ============================================================================== #
 # TABLE OF CONTENTS
-# - PARAMETERS, DATA STRUCTURES, AND RECONSTRUCTION  : tag_params_structs_recon
-# - SPATIAL DISCRETIZATION AND PDE SOLVER            : tag_grid_and_solver
-# - DATA MANAGEMENT AND SERIALIZATION                : tag_data_and_serialization
-# - VISUALIZATION AND ANALYSIS PIPELINE              : tag_visualization
-# - SIMULATION CONFIGURATION AND EXECUTION           : tag_config_and_execution
+# - PARAMETERS, DATA STRUCTURES, HELPER FUNCTIONS : tag_params_structs_helpers
+# - SPATIAL DISCRETIZATION AND PDE SOLVER         : tag_grid_and_solver
+# - SIMULATION RUNS AND DATA MANAGEMENT           : tag_runs_and_data
+# - VISUALIZATION AND ANALYSIS PIPELINE           : tag_visualization
+# - SIMULATION CONFIGURATION AND EXECUTION        : tag_config_and_execution
 # ============================================================================== #
 
 
 # ============================================================================== #
-# PARAMETERS, DATA STRUCTURES, AND RECONSTRUCTION
-# tag_params_structs_recon
+# PARAMETERS, DATA STRUCTURES, HELPER FUNCTIONS
+# tag_params_structs_helpers
 # ============================================================================== #
 
 # Physical unit conversion factors:
@@ -60,7 +63,7 @@ struct PulseParameters
     function PulseParameters(A0::Real, λ_nm::Real, σ::Real, shelf_duration_fs::Real = 0.0)
         A0 > 0                 || throw(ArgumentError("Field amplitude A0 must be strictly positive (got $A0)"))
         λ_nm > 0               || throw(ArgumentError("Laser wavelength λ_nm must be strictly positive (got $λ_nm)"))
-        σ > 0                  || throw(ArgumentError("Pulse rise parameter σ must be strictly positive (got $σ)"))
+        σ > 0                  || throw(ArgumentError("Gaussian falloff parameter σ must be strictly positive (got $σ)"))
         shelf_duration_fs >= 0 || throw(ArgumentError("Shelf duration must be non-negative (got $shelf_duration_fs)"))
         return new(Float64(A0), Float64(λ_nm), Float64(σ), Float64(shelf_duration_fs))
     end
@@ -71,9 +74,11 @@ PulseParameters(nt::NamedTuple) = PulseParameters(; nt...)
 # Spatial and temporal simulation domain boundaries
 struct Domain
     T_sim::NTuple{2, Float64}     # Total integration interval: (T_min, T_max)
-    T_save::NTuple{2, Float64}    # Diagnostic recording window: (T_i, T_f)
-    dZ_steps::NTuple{2, Float64}  # Spatial resolution bounds: (dZ_min, dZ_max)
-    N_time_steps::Int             # Number of recorded time slices
+    T_save::NTuple{2, Float64}    # Data recording window: (T_i, T_f)
+    dZ_steps::NTuple{2, Float64}  # Spatial node separations: (dZ_min, dZ_max); 
+                                  #  - dZ_min is used in the active region
+                                  #  - dZ_max is used in the marginal regions
+    N_time_steps::Int             # Number of uniformly recorded time slices
 end
 
 # --- Kinematic and Parameter Conversion Helpers ---
@@ -127,7 +132,7 @@ function resolve_finish_time(T_max_spec, shelf_idx::Int, L::Float64, σ::Float64
     end
 end
 
-# Evaluates 2nd-order non-uniform derivative for shock-bordering plateau slope diagnostics
+# Approximation of the 2nd-order non-uniform derivative for the shock-bordering slope
 function calc_slope_2nd_order(z0, z1, z2, y0, y1, y2)
     term0 = y0 * (2.0 * z0 - z1 - z2) / ((z0 - z1) * (z0 - z2))
     term1 = y1 * (z0 - z2) / ((z1 - z0) * (z1 - z2))
@@ -145,7 +150,35 @@ function format_latex_sci(value::Float64)
     return exponent == 0 ? mantissa : "$mantissa \\times 10^{$exponent}"
 end
 
-# --- High-Order Numerical Reconstruction and Spline Quadrature ---
+# Cumulative integration of piecewise Akima spline interpolation
+function cumint_akima!(dest::AbstractVecOrMat, in_vals, x_grid; col::Integer = 1)
+    target = dest isa AbstractMatrix ? @view(dest[:, col]) : dest
+    interp = AkimaInterpolation(in_vals, x_grid)
+    
+    idx_start = firstindex(target)
+    target[idx_start] = zero(eltype(target))
+    
+    @inbounds for i in (idx_start + 1):lastindex(target)
+        target[i] = target[i - 1] + DataInterpolations.integral(interp, x_grid[i - 1], x_grid[i])
+    end
+
+    return dest
+end
+
+
+# ============================================================================== #
+# SPATIAL DISCRETIZATION AND PDE SOLVER
+# tag_grid_and_solver
+#
+# Functions in this section:
+# - WENO5_Z
+# - compute_spatial_grid
+# - nonuniform_grid_params
+# - pde_system!
+# - run_solver
+# ============================================================================== #
+
+# --- High-Order Numerical ---
 
 # Fifth-order WENO-Z reconstruction on a uniform five-point stencil
 # Evaluates left-biased interface value from candidate stencils (S0, S1, S2)
@@ -167,33 +200,6 @@ function WENO5_Z(fm2, fm1, fc0, fp1, fp2)
 
     return (α0*S0 + α1*S1 + α2*S2) / (6.0 * (α0 + α1 + α2))
 end
-
-# Cumulative integration using piecewise Akima cubic Hermite spline interpolation
-function cumint_akima!(dest::AbstractVecOrMat, in_vals, x_grid; col::Integer = 1)
-    target = dest isa AbstractMatrix ? @view(dest[:, col]) : dest
-    interp = AkimaInterpolation(in_vals, x_grid)
-    
-    idx_start = firstindex(target)
-    target[idx_start] = zero(eltype(target))
-    
-    @inbounds for i in (idx_start + 1):lastindex(target)
-        target[i] = target[i - 1] + DataInterpolations.integral(interp, x_grid[i - 1], x_grid[i])
-    end
-
-    return dest
-end
-
-
-# ============================================================================== #
-# SPATIAL DISCRETIZATION AND PDE SOLVER
-# tag_grid_and_solver
-#
-# Functions in this section:
-# - compute_spatial_grid
-# - nonuniform_grid_params
-# - pde_system!
-# - run_solver
-# ============================================================================== #
 
 # --- Non-Uniform Grid Generator ---
 
@@ -253,7 +259,7 @@ function compute_spatial_grid(grid_params)
         lo = ifelse(target < C_shelf_L, lo_falloff, Z_active_R)
         hi = ifelse(target < C_shelf_L, Z_active_L, hi_falloff)
 
-        for _ in 1:60
+        for _ in 1:60 # Fixed iterations sufficient for convergence
             mid = 0.5 * (lo + hi)
             is_less = C_cdf(mid) < target
             lo = ifelse(is_less, mid, lo)
@@ -263,7 +269,7 @@ function compute_spatial_grid(grid_params)
         return 0.5 * (lo + hi)
     end
 
-    # Coordinates of uniform ξ grid cell centers
+    # Corresponding ζ coordinates from uniform ξ grid cell centers
     Z_grid = zeros(Float64, N)
     Z_grid[1] = Z_min
     Z_grid[end] = Z_max
@@ -272,7 +278,7 @@ function compute_spatial_grid(grid_params)
         Z_grid[i] = invert_cdf(ξ_i, Z_min, Z_max)
     end
 
-    # Coordinates of uniform ξ grid cell interfaces
+    # Corresponding ζ coordinates from uniform ξ grid cell interfaces
     Z_inter = zeros(Float64, N + 1)
     @inbounds @batch for j in 1:(N + 1)
         ξ_j = (j - 1.5) / (N - 1)
@@ -301,10 +307,10 @@ function compute_spatial_grid(grid_params)
     return N, Z_grid, Z_inter, inv_dZ_nodes, inv_dZ_cells
 end
 
-# --- Parameter and Cache Bundler ---
+# --- Cached Parameters Collector ---
 
 # Assembles pre-allocated caches for state extension, interface numerical fluxes,
-# extrema tracking, non-uniform spatial grid metrics, and background kinematics.
+# extrema tracking, non-uniform spatial grid metrics, and constant parameters
 function nonuniform_grid_params(constants, grid_params)
     @unpack q, A0, α, β1, β2, pϵ1, pϵ2 = constants
     @unpack σ, L = grid_params
@@ -465,13 +471,13 @@ end
 
 
 # ============================================================================== #
-# DATA MANAGEMENT AND SERIALIZATION
-# tag_data_and_serialization
+# SIMULATION RUNS AND DATA MANAGEMENT
+# tag_runs_and_data
 #
 # Functions in this section:
 # - get_workspace_paths
-# - resolve_run_filename
-# - resolve_run_filenames
+# - resolve_filename
+# - resolve_many_filenames
 # - resolve_data_source
 # - run_and_save
 # - interactive_loader
@@ -495,7 +501,7 @@ end
 # --- File Name Handler ---
 
 # Formulates a collision-safe identifier and file path, auto-incrementing if requested
-function resolve_run_filename(dir_path::String, name_spec = nothing; reserved::Set{String} = Set{String}())
+function resolve_filename(dir_path::String, name_spec = nothing; reserved::Set{String} = Set{String}())
     isdir(dir_path) || mkpath(dir_path)
     existing_files = readdir(dir_path)
     
@@ -533,12 +539,12 @@ end
 # --- Batch File Name Resolver ---
 
 # Resolves a collection of run identifiers across a shared reservation registry
-function resolve_run_filenames(dir_path::String, specs)
+function resolve_many_filenames(dir_path::String, specs)
     reserved = Set{String}()
     if specs isa Union{Tuple, AbstractVector}
-        return [resolve_run_filename(dir_path, s; reserved = reserved) for s in specs]
+        return [resolve_filename(dir_path, s; reserved = reserved) for s in specs]
     else
-        return resolve_run_filename(dir_path, specs; reserved = reserved)
+        return resolve_filename(dir_path, specs; reserved = reserved)
     end
 end
 
@@ -575,7 +581,7 @@ function run_and_save(cfg::NamedTuple)
     ws_name = get(cfg, :workspace_name, "Workspace_Main")
     ws = get_workspace_paths(work_directory, ws_name)
     req_name = get(cfg, :run_name, nothing)
-    run_name, file_path = resolve_run_filename(ws.data_dir, req_name)
+    run_name, file_path = resolve_filename(ws.data_dir, req_name)
     println("Initializing batch run: $run_name (Workspace: $ws_name)")
 
     (; m, q, c, ħ) = units
@@ -1499,7 +1505,7 @@ end
 # ============================================================================== #
 
 # --- Configuration ---
-work_directory = raw"C:\Users\PC\Desktop\PRA_submission_scripts"
+work_directory = raw"C:\Users\PC\Desktop\Submission scripts"
 workspace_name = :Workspace_Main
 
 run_config = (
