@@ -1505,48 +1505,46 @@ end
 # ============================================================================== #
 
 # --- Configuration ---
-work_directory = raw"C:\Users\PC\Desktop\Submission scripts"
+work_directory = raw"Path\To\Work\Directory"
 workspace_name = :Workspace_Main
 
 run_config = (
     # Identifier (String, Symbol, or nothing / :_ for auto-incremented Run_i name)
-    run_name            = :_,
+    run_name = :_,
     
     # Particle properties and optical pulse parameters
-    units               = PhysicalUnits(m = 1.0, q = -1.0, c = 137.036, ħ = 1.0),
-    pulse_params        = PulseParameters(A0 = 13.0, λ_nm = 800.0, σ = 10.0),
+    units = PhysicalUnits(m = 1.0, q = -1.0, c = 137.036, ħ = 1.0),
+    pulse_params = PulseParameters(A0 = 13.0, λ_nm = 800.0, σ = 10.0),
     
     # Batch parameter permutations
-    initial_momenta     = [
-        SVector(0.0, 0.0, 0.0),
-        SVector(0.128, 0.343, 3.996)
-    ],
-    shelf_durations_fs  = [10.0, 15.0, 25.0],
+    initial_momenta = [],
+    shelf_durations_fs  = [],
     
     # Spatial grid resolution bounds: (dZ_min in refined shelf, dZ_max in asymptotic margins)
-    spatial_resolutions = (7.5e-4, 1e-2),
-    N_time_steps        = 300,
+    spatial_resolutions = (1e-3, 1e-2),
+    N_time_steps = 100,
     
     # Simulation finish time specification:
     # 1. Functional expression: (L, σ) -> 0.5 * L + 3.0 * σ + 1.0
-    # 2. Vector of times: [20.0, nothing, 45.0] (empty entries/shorter list default to symmetric |T_min|)
+    # 2. Vector of times: e.g., [20.0, nothing, 45.0]
+    # (empty entries/shorter list default to symmetric |T_min|)
     # 3. nothing: all shelves terminate symmetrically at |T_min|
-    T_max               = (L, σ) -> 0.5 * L + 3.0 * σ + 1.0,
+    T_max = (L, σ) -> 0.5 * L + 3.0 * σ + 1.0,
     
     # Diagnostic recording sub-window (set to nothing to record full duration [T_min, T_max])
-    T_i                 = nothing,
-    T_f                 = nothing,
+    T_i = nothing,
+    T_f = nothing,
     
     # Root workspace directory and workspace folder
-    work_directory      = work_directory,
-    workspace_name      = workspace_name
+    work_directory = work_directory,
+    workspace_name = workspace_name
 )
 
 # Diagnostic interaction timestamps for thermalization snapshot slices
-target_thermalization_taus = [7.64, 23.45, 45.88]
+target_thermalization_taus = []
 
 # Snapshot interaction timestamp for zoomed shock profile
-target_shock_tau = -1.72
+target_shock_tau = 0.0
 
 
 # --- Execution ---
@@ -1585,7 +1583,7 @@ target_shock_tau = -1.72
 # -- Explicit keyword call:
 # plot_zoomed_snapshot(loaded_data, target_shock_tau;
 #                      is_gradient   = true,
-#                      zoom_lims     = (pi/2 - 0.5, pi/2 + 0.5),
+#                      zoom_lims     = (π/2 - 0.1, π/2 + 0.1),
 #                      save_filename = "zoomed_shock_gradient.pdf")
 
 

@@ -947,7 +947,7 @@ end
 # ============================================================================== #
 
 # --- Configuration ---
-work_directory = raw"C:\Users\PC\Desktop\PRA_submission_scripts"
+work_directory = raw"Path\To\Work\Directory"
 workspace_name = :Workspace_Auxiliary
 
 run_config = (
@@ -960,20 +960,20 @@ run_config = (
     initial_momentum    = SVector(0.0, 0.0, 0.0),
     
     # Spatial grid resolution bounds (dZ_min in refined shelf, dZ_max in outer regions)
-    spatial_resolutions = (1.5e-4, 1e-2),
-    N_time_steps        = 200,
+    spatial_resolutions = (1e-3, 1e-2),
+    N_time_steps        = 100,
     
     # Temporal integration interval and recording window
-    T_max               = -15.0,   # Symmetrical |T_min| if nothing
-    T_i                 = -15.50,  # Recording window start
-    T_f                 = -15.10,  # Recording window end
+    T_max               = 0.0,   # Symmetrical |T_min| if nothing
+    T_i                 = 0.0,  # Recording window start
+    T_f                 = 0.0,  # Recording window end
     
     # Root workspace directory and separate workspace folder
     work_directory      = work_directory,
     workspace_name      = workspace_name
 )
 
-target_timestamps = [-15.22, -15.19, -15.16, -15.13]
+target_timestamps = []
 
 # --- Execution ---
 # - Run simulation and save data into <work_directory>/<workspace_name>/Data/ :
