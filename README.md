@@ -16,12 +16,10 @@ This repository contains the production Julia solvers used to model electron dyn
 ### Script Manifest
 
 * **`solver_main.jl`**  
-  Solves the 1D semiclassical hyperbolic conservation law for the interaction phase gradient $\Theta_\zeta(\tau, \zeta)$ via a fifth-order WENO-Z scheme and Local Lax–Friedrichs flux splitting. Evaluates guiding-center advection drift and computes the Kapitza–Dirac momentum spread $\Delta P_{\text{KD}}$.  
-  *(Generates Figures 2–5 and Table I of the manuscript).*
+Main solver integrating the 1D semiclassical hyperbolic conservation law for the interaction phase gradient. Performs simulations across pulse durations and initial momentum states to determine the resulting Kapitza–Dirac momentum transfer (generates Figures 2–5 and Table I of the manuscript).
 
 * **`solver_auxiliary.jl`**  
-  Integrates the coupled complex evolution equation in conservation form for $v_\zeta(\tau, \zeta)$, retaining both the log-amplitude gradient $\Lambda_\zeta$ and phase gradient $\Theta_\zeta$. Used as a diagnostic solver to analyze extreme spatial compression and caustic formation.  
-  *(Generates Figure 1 of the manuscript).*
+Diagnostic solver integrating the coupled complex conservation law retaining both log-amplitude and phase gradients. Investigates spatial compression dynamics, caustic formation, and computational resolution limits (generates Figure 1 of the manuscript).
 
 ---
 
@@ -70,14 +68,14 @@ Pkg.instantiate()
 Both scripts are self-contained and execute without external CLI configuration files. Simulation parameters, spatial grids, and numerical tolerances are declared directly inside the source code:
 
 1. Open `solver_main.jl` or `solver_auxiliary.jl` in a text editor or IDE (such as VS Code with the Julia extension).
-2. Set or inspect the physical parameters (potential amplitude $A_0$, pulse shelf duration $L$, standard deviation $\sigma$, initial electron momentum $\mathbf{p}$) within the `run_config` tuple located in Section 5 (*Simulation Configuration, Execution and Workflow*).
+2. Set or inspect the physical parameters (such as potential amplitude $A_0$, pulse shelf duration $L$, standard deviation $\sigma$, initial electron momentum $\mathbf{p}$, etc.) within the `run_config` tuple located in Section 5 (*Simulation Configuration, Execution and Workflow*).
 3. Execute the simulation or post-processing plotting functions directly in an interactive Julia REPL.
 
 ---
 
 ## Data Availability & Supplemental Material
 
-A static, immutable snapshot of these scripts is archived in the journal's official Supplemental Material deposit (`code.zip`). Tabular data across varying shelf durations and momentum states are reported in the manuscript and Supplemental Material document.
+An instance of these scripts is archived in the journal's official Supplemental Material deposit (`code.zip`). Tabular data across varying shelf durations and momentum states are reported in the manuscript and Supplemental Material document.
 
 ---
 
