@@ -1,0 +1,17 @@
+# Data and simulation state files
+*.jld2
+*.h5
+*.mat
+*.dat
+
+# Julia cache & coverage
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+deps/deps.jl
+
+# OS & IDE caches
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
