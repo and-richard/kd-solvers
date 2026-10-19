@@ -1,4 +1,4 @@
-using LinearAlgebra, StaticArrays, SparseArrays
+using LinearAlgebra, StaticArrays
 using Parameters
 using CairoMakie, LaTeXStrings, Printf
 using Statistics
@@ -1505,7 +1505,7 @@ end
 # ============================================================================== #
 
 # --- Configuration ---
-work_directory = raw"Path\To\Work\Directory"
+work_directory = "path/to/work_directory"
 workspace_name = :Workspace_Main
 
 run_config = (
@@ -1516,7 +1516,10 @@ run_config = (
     units = PhysicalUnits(m = 1.0, q = -1.0, c = 137.036, ħ = 1.0),
     pulse_params = PulseParameters(A0 = 13.0, λ_nm = 800.0, σ = 10.0),
     
-    # Batch parameter permutations
+    # Main parameters (populate with desired momentum vectors and shelf durations)
+    # Example minimal run:
+    #   initial_momenta    = [SVector(0.0, 0.0, 0.0)],
+    #   shelf_durations_fs = [25.0],
     initial_momenta = [],
     shelf_durations_fs  = [],
     

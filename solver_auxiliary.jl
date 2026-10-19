@@ -1,4 +1,4 @@
-using LinearAlgebra, StaticArrays, SparseArrays
+using LinearAlgebra, StaticArrays
 using Parameters
 using CairoMakie, LaTeXStrings, Printf
 using SpecialFunctions
@@ -947,7 +947,7 @@ end
 # ============================================================================== #
 
 # --- Configuration ---
-work_directory = raw"Path\To\Work\Directory"
+work_directory = "path/to/work_directory"
 workspace_name = :Workspace_Auxiliary
 
 run_config = (
@@ -964,9 +964,9 @@ run_config = (
     N_time_steps        = 100,
     
     # Temporal integration interval and recording window
-    T_max               = 0.0,   # Symmetrical |T_min| if nothing
-    T_i                 = 0.0,  # Recording window start
-    T_f                 = 0.0,  # Recording window end
+    T_max               = nothing,   # Symmetrical |T_min| if nothing
+    T_i                 = nothing,  # Recording window start
+    T_f                 = nothing,  # Recording window end
     
     # Root workspace directory and separate workspace folder
     work_directory      = work_directory,
